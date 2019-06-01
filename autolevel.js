@@ -11,6 +11,7 @@ module.exports = class Autolevel {
     this.delta = 10.0 // step
     this.feed = 50 // probing feedrate
     this.height = 2 // travelling height
+    this.probeMultipleTimes = true
     this.probedPoints = []
     this.planedPointCount = 0
     this.wco = {
@@ -46,6 +47,7 @@ module.exports = class Autolevel {
             this.probedPoints.push(pt)
             console.log('probed ' + this.probedPoints.length + '/' + this.planedPointCount + '>', pt.x.toFixed(3), pt.y.toFixed(3), pt.z.toFixed(3))
             if (this.probedPoints.length >= this.planedPointCount) {
+              this.dropExtremeMeasurements();
               this.applyCompensation()
               this.planedPointCount = 0
             }
@@ -103,14 +105,36 @@ module.exports = class Autolevel {
       while (x < context.xmax - 0.01) {
         x += dx
         if (x > context.xmax) x = context.xmax
-        code.push(`G90 G0 X${x.toFixed(3)} Y${y.toFixed(3)} Z${this.height}`)
-        code.push(`G38.2 Z-${this.height} F${this.feed}`)
-        code.push(`G0 Z${this.height}`)
-        this.planedPointCount++
+        if (this.probeMultipleTimes) {
+          for (var ii = 0; i < 3; i++) {
+            code.push(`G90 G0 X${x.toFixed(3)} Y${y.toFixed(3)} Z${this.height}`)
+            code.push(`G38.2 Z-${this.height} F${this.feed}`)
+            code.push(`G0 Z${this.height}`)
+            this.planedPointCount++
+          }
+        else {
+          code.push(`G90 G0 X${x.toFixed(3)} Y${y.toFixed(3)} Z${this.height}`)
+          code.push(`G38.2 Z-${this.height} F${this.feed}`)
+          code.push(`G0 Z${this.height}`)
+          this.planedPointCount++
+        }
       }
     }
     this.sckw.sendGcode(code.join('\n'))
   }
+
+  dropExtremeMeasurements () {
+    if (!this.probeMultipleTimes) {
+      return
+    }
+
+    var newProbedPoints = []
+    for (var i = 0; i < this.probedPoints.length; i += 3) {
+      newProbedPoints.push(this.probedPoints.slice(i, i + 1).sort()[1])
+    }
+    this.probedPoints = newProbedPoints
+  }
+
 
   stripComments (line) {
     const re1 = new RegExp(/\s*\([^\)]*\)/g) // Remove anything inside the parentheses
